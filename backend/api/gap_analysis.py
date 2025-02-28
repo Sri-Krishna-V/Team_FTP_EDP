@@ -20,6 +20,7 @@ llm = ChatPerplexity(
 
 # Create a system message for the GAP Analysis
 system_message = """
+Use 200 or less words.
 You are an expert entrepreneurship development advisor conducting a GAP analysis for students. 
 Your goal is to assess their current entrepreneurial skills, knowledge, and business ideas through 
 an interactive conversation. Ask relevant questions about:
