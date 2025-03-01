@@ -138,23 +138,20 @@ if __name__ == "__main__":
 
     # Initialize conversation history
     conversation_history = []
-
-    # Simulate a conversation
-    user_responses = [
-        "I'm thinking of starting an e-commerce platform for sustainable products.",
-        "I have some programming skills and have built websites before.",
-        "I think there's growing demand for eco-friendly products, but I'm not sure about the competition.",
-        "I have about $5000 saved up to start this venture.",
-        "I'm currently working alone but plan to bring on partners later.",
-        "GENERATE_SWOT"  # This will trigger the SWOT analysis
-    ]
-
-    # Continue the conversation
-    for user_input in user_responses:
-        print(f"\nUser: {user_input}")
-        response, conversation_history = process_user_input(
-            user_input, conversation_history)
+    
+    # Start with the initial prompt
+    response, conversation_history = process_user_input(initial_prompt, conversation_history)
+    
+    # Manual conversation loop
+    while True:
+        user_input = input("\nYou: ")
+        if user_input.lower() == "exit":
+            break
+        
+        response, conversation_history = process_user_input(user_input, conversation_history)
         print(f"AI: {response}")
+    conversation_history = []
+    
     print("\n----------------------------------")
     print("End of Conversation")
     print("----------------------------------")

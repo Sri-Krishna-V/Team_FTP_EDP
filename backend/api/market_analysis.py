@@ -1,4 +1,3 @@
-# market_agent.py
 import os
 from dotenv import load_dotenv
 from langchain.agents import create_tool_calling_agent, AgentExecutor
@@ -18,7 +17,7 @@ class MarketAnalysisAgent:
         self.llm = ChatPerplexity(
             api_key=os.getenv("PERPLEXITY_API_KEY"),
             model="sonar-pro",
-            temperature=0.3
+            temperature=0.2
         )
 
         self.search = TavilySearchAPIWrapper(
@@ -89,7 +88,8 @@ class MarketAnalysisAgent:
             ("system", """You are an expert market analyst specializing in Indian startup initiatives. For any business idea, provide:
 1. **Industry Research**: Current trends, TAM/SAM/SOM analysis, growth drivers
 2. **Scalability Assessment**: Expansion potential, operational scalability, tech leverage
-3. **Breakeven Analysis**: Cost structures, revenue models, financial projections
+3. **Breakeven Analysis**: Cost structures, reve
+nue models, financial projections
 4. **Economic Factors**: Regulatory landscape, funding ecosystem, macroeconomic impacts
 
 Base your analysis on verified data sources and include numerical estimates where possible."""),
@@ -119,3 +119,11 @@ Base your analysis on verified data sources and include numerical estimates wher
             return ""
         end = output.find("\n\n", start)
         return output[start:end if end != -1 else None].strip()
+
+if __name__ == "__main__":
+    agent = MarketAnalysisAgent()
+    result = agent.analyze("Eco-friendly packaging solutions for e-commerce")
+    print(result)
+#         "I need to understand the competitive landscape for my idea.",
+#         "What are the economic factors affecting my business?"
+#     ] 
