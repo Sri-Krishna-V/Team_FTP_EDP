@@ -95,5 +95,3 @@ Future enhancements include:
 - **User Interface Improvements**: Enhancing the user experience through intuitive design and feedback mechanisms.
 - **Integration with Other Tools**: Incorporating additional tools for comprehensive support of EDP-trained individuals.
 
-Citations:
-[1] https://github.com/Premchand006/Team-FTP
