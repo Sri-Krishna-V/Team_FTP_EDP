@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from typing import List, Dict, Any
 from datetime import datetime
+import logging
 
 # LangChain imports
 from langchain.document_loaders import PyPDFLoader, DirectoryLoader
@@ -16,6 +17,9 @@ from langchain.callbacks import get_openai_callback
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class MSMECapitalManagementAgent:
     def __init__(self, pdf_directory: str = "./govt_pdfs",
@@ -32,23 +36,42 @@ class MSMECapitalManagementAgent:
         # Set API key
         if openai_api_key:
             os.environ["OPENAI_API_KEY"] = openai_api_key
-
+        elif "OPENAI_API_KEY" not in os.environ:
+            raise ValueError("OpenAI API key is required. Either pass it as a parameter or set the OPENAI_API_KEY environment variable.")
+            
         self.pdf_directory = pdf_directory
         self.persist_directory = persist_directory
+        
+        # Create directories if they don't exist
+        os.makedirs(pdf_directory, exist_ok=True)
+        os.makedirs(persist_directory, exist_ok=True)
 
         # Initialize components
         self.llm = ChatOpenAI(model_name="gpt-4", temperature=0)
         self.embeddings = OpenAIEmbeddings()
 
-        # Check if vector store exists, otherwise create it
-        if os.path.exists(persist_directory) and os.listdir(persist_directory):
-            print("Loading existing vector store...")
-            self.vectorstore = Chroma(
-                persist_directory=persist_directory,
-                embedding_function=self.embeddings
-            )
-        else:
-            print("Creating new vector store from documents...")
+        # Check if vector store exists and has content, otherwise create it
+        try:
+            if os.path.exists(persist_directory) and any(f.endswith('.bin') for f in os.listdir(persist_directory)):
+                logger.info("Loading existing vector store...")
+                self.vectorstore = Chroma(
+                    persist_directory=persist_directory,
+                    embedding_function=self.embeddings
+                )
+                
+                # Verify the vector store has content
+                doc_count = self.vectorstore._collection.count()
+                if doc_count == 0:
+                    logger.warning("Vector store exists but is empty. Creating new vector store...")
+                    self._create_vector_store()
+                else:
+                    logger.info(f"Vector store loaded with {doc_count} documents")
+            else:
+                logger.info("Creating new vector store from documents...")
+                self._create_vector_store()
+        except Exception as e:
+            logger.error(f"Error initializing vector store: {str(e)}")
+            logger.info("Creating new vector store from documents...")
             self._create_vector_store()
 
         # Setup RAG components
@@ -59,30 +82,52 @@ class MSMECapitalManagementAgent:
 
     def _create_vector_store(self):
         """Process PDFs and create vector store"""
-        # Load PDFs
-        loader = DirectoryLoader(
-            self.pdf_directory,
-            glob="**/*.pdf",
-            loader_cls=PyPDFLoader
-        )
-        documents = loader.load()
+        try:
+            # Check if PDF directory exists and has PDFs
+            if not os.path.exists(self.pdf_directory):
+                raise FileNotFoundError(f"PDF directory '{self.pdf_directory}' does not exist")
+            
+            pdf_files = [f for f in os.listdir(self.pdf_directory) if f.lower().endswith('.pdf')]
+            if not pdf_files:
+                raise FileNotFoundError(f"No PDF files found in '{self.pdf_directory}'")
+            
+            logger.info(f"Found {len(pdf_files)} PDF files in directory")
+            
+            # Load PDFs
+            loader = DirectoryLoader(
+                self.pdf_directory,
+                glob="**/*.pdf",
+                loader_cls=PyPDFLoader
+            )
+            documents = loader.load()
+            
+            if not documents:
+                raise ValueError("No documents were loaded from PDFs")
+                
+            logger.info(f"Loaded {len(documents)} documents from PDFs")
 
-        # Split documents into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            separators=["\n\n", "\n", " ", ""]
-        )
-        chunks = text_splitter.split_documents(documents)
+            # Split documents into chunks
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                separators=["\n\n", "\n", " ", ""]
+            )
+            chunks = text_splitter.split_documents(documents)
+            
+            logger.info(f"Split documents into {len(chunks)} chunks")
 
-        # Create and persist vector store
-        self.vectorstore = Chroma.from_documents(
-            documents=chunks,
-            embedding=self.embeddings,
-            persist_directory=self.persist_directory
-        )
-        self.vectorstore.persist()
-        print(f"Created vector store with {len(chunks)} chunks")
+            # Create and persist vector store
+            self.vectorstore = Chroma.from_documents(
+                documents=chunks,
+                embedding=self.embeddings,
+                persist_directory=self.persist_directory
+            )
+            self.vectorstore.persist()
+            logger.info(f"Created and persisted vector store with {len(chunks)} chunks")
+            
+        except Exception as e:
+            logger.error(f"Error creating vector store: {str(e)}")
+            raise
 
     def _setup_rag_chain(self):
         """Set up the RAG chain with appropriate prompts"""
@@ -393,6 +438,101 @@ class MSMECapitalManagementAgent:
             f"Added {len(chunks)} chunks from {new_pdf_path} to the knowledge base")
         print(
             f"Knowledge base now contains metadata for {len(self.scheme_database)} schemes")
+
+    def add_pdf_document(self, pdf_path: str) -> bool:
+        """
+        Add a single PDF document to the knowledge base
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Boolean indicating success
+        """
+        try:
+            if not os.path.exists(pdf_path):
+                logger.error(f"PDF file not found: {pdf_path}")
+                return False
+                
+            # Copy file to PDF directory if it's not already there
+            filename = os.path.basename(pdf_path)
+            destination_path = os.path.join(self.pdf_directory, filename)
+            
+            if pdf_path != destination_path:
+                import shutil
+                shutil.copy2(pdf_path, destination_path)
+                logger.info(f"Copied PDF to repository: {destination_path}")
+            
+            # Update knowledge base with the new PDF
+            self.update_knowledge_base(destination_path)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error adding PDF document: {str(e)}")
+            return False
+
+    def query_knowledge_base(self, query: str, k: int = 5) -> Dict:
+        """
+        Query the knowledge base directly with a specific question
+        
+        Args:
+            query: Question to ask
+            k: Number of relevant documents to retrieve
+            
+        Returns:
+            Dictionary with answer and source documents
+        """
+        try:
+            with get_openai_callback() as cb:
+                result = self.rag_chain.invoke({"query": query})
+                logger.info(f"Query processed - Tokens used: {cb.total_tokens}, Cost: ${cb.total_cost:.4f}")
+                
+            return {
+                "answer": result["result"],
+                "sources": [{"content": doc.page_content, "source": doc.metadata.get("source", "Unknown")} 
+                           for doc in result.get("source_documents", [])]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error querying knowledge base: {str(e)}")
+            return {"answer": "Error occurred while processing your query", "sources": []}
+
+    def get_all_schemes(self) -> List[Dict]:
+        """
+        Get a list of all schemes in the database
+        
+        Returns:
+            List of dictionaries with scheme information
+        """
+        return list(self.scheme_database.values())
+
+    def health_check(self) -> Dict:
+        """
+        Check if the system is properly initialized and functioning
+        
+        Returns:
+            Status dictionary
+        """
+        status = {
+            "status": "operational",
+            "vector_store": "available",
+            "scheme_count": len(self.scheme_database),
+            "pdf_directory_exists": os.path.exists(self.pdf_directory),
+            "persist_directory_exists": os.path.exists(self.persist_directory)
+        }
+        
+        # Check if we can perform a basic query
+        try:
+            test_query = self.query_knowledge_base("List a few MSME schemes", k=1)
+            if test_query.get("answer"):
+                status["test_query"] = "successful"
+            else:
+                status["test_query"] = "failed - no answer returned"
+        except Exception as e:
+            status["status"] = "degraded"
+            status["test_query"] = f"failed - {str(e)}"
+        
+        return status
 
 
 # Example usage

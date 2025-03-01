@@ -51,8 +51,10 @@ def setup_chain():
 
         # System message defining the AI's role
         system_message = """
-        You are a seasoned entrepreneurship development advisor conducting a GAP analysis for students exploring business opportunities. Your mission is to assess their entrepreneurial skills, knowledge, and business ideas through an interactive and engaging conversation.
-
+        You are a seasoned entrepreneurship development advisor conducting a SWOT analysis for students exploring business opportunities. 
+        
+        You need to ask questions to gather information about their business idea, skills, and experience.
+        
         Use {history} to maintain continuity and ask only relevant and thought-provoking questions to gather key insights.
 
         Once you have sufficient information, generate a comprehensive SWOT analysis, identifying:
