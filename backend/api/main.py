@@ -7,7 +7,7 @@ from langchain.chains import ConversationalRetrievalChain, ConversationChain
 from langchain_community.chat_models import ChatPerplexity
 from langchain.memory import ConversationBufferMemory
 from market_analysis import MarketAnalysisAgent
-from gap_analysis import gap_analysis_endpoint
+from gap_analysiss import gap_analysis_endpoint
 from pydantic import BaseModel
 
 load_dotenv()
